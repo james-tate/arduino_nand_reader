@@ -260,10 +260,13 @@ void readDATANAND(){
   digitalWrite(CLE,OFF);
   delayMicroseconds(500);
   
+  setDataBusIn();
+  
+  for(int i = 0; i < 16; i++) readDataBus(HEX);
+  
   digitalWrite(CE,ON);
   digitalWrite(RE,ON);
   
-  for(int i = 0; i < 16; i++) readDataBus(HEX);
   Serial.println("\n\rRead Data complete\n\r");
   Serial.println("====================================");
   
