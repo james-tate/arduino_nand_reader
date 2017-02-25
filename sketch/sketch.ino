@@ -13,7 +13,7 @@
 // 
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
- 
+
 
 
 
@@ -23,10 +23,10 @@
 // if 16 channel uncomment this 
 // #define __x16__
 
-// if write enable function is added uncomment this
+// if write enable function is added comment this this
 #define __READONLY__
-#ifndef __READONLY__
-#warning "Write Protect is disabled"
+#ifdef __READONLY__
+#warning "Write Protect is Enabled"
 #endif
 
 #ifndef __x16__
@@ -68,6 +68,16 @@
 #error "board not supported"
 #endif
 
+#define BIT0      1
+#define BIT1      2
+#define BIT2      4
+#define BIT3      8
+#define BIT4     16
+#define BIT5     32
+#define BIT6     64
+#define BIT7    128
+
+// todo: think of way to clarify inverted signals
 enum{
   OFF = 0,
   ON = 1,
@@ -75,7 +85,19 @@ enum{
 
 // reads the info of NAND chip
 void readIDNAND();
+// read data
+void readDATANAND();
+// reads data bus
+int readDataBus(int base);
+// sets data bus for output
+void setDataBusOut();
+// sets data bus for input
+void setDataBusIn();
+// write address to databus
+void putDataBus(int i);
 
+
+// set this up
 void setup(){
   //setup comm to computer
   Serial.begin(115200);
@@ -90,14 +112,7 @@ void setup(){
   pinMode(WP, OUTPUT);    // Write protect
   pinMode(RB, INPUT);     // Read busy
   // set all IO pins to input for start
-  pinMode(IO_0, INPUT);
-  pinMode(IO_1, INPUT);
-  pinMode(IO_2, INPUT);
-  pinMode(IO_3, INPUT);
-  pinMode(IO_4, INPUT);
-  pinMode(IO_5, INPUT);
-  pinMode(IO_6, INPUT);
-  pinMode(IO_7, INPUT);
+  setDataBusIn();
 #if defined(__x16__)
   pinMode(IO_8, INPUT);
   pinMode(IO_9, INPUT);
@@ -121,10 +136,12 @@ void setup(){
   Serial.println("Pin setup complete");
 }
 
+// do this forever and ever and ever and ever and ever and ever and ever and ever .....
 void loop(){
   int choice = 0;
   Serial.println("Choose Option");
   Serial.println("1: ReadID");
+  Serial.println("2: Read Contents");
   while(Serial.available() == 0){
     delayMicroseconds(500);
   }
@@ -132,25 +149,20 @@ void loop(){
   if(choice == '1'){
     readIDNAND();
   }
+  if(choice == '2'){
+    readDATANAND();
+  }
 }
 
 void readIDNAND(){
-  //TODO: write this function to be more verbose 
-  // "ability to input ID's commands and address commands"
 
+  Serial.println("====================================");
   Serial.println("\n\rReading ID\n\r");
   //while(!digitalRead(RB)){
   //delayMicroseconds(500);
   //}
-  Serial.println("reading");
-  pinMode(IO_0, OUTPUT);
-  pinMode(IO_1, OUTPUT);
-  pinMode(IO_2, OUTPUT);
-  pinMode(IO_3, OUTPUT);
-  pinMode(IO_4, OUTPUT);
-  pinMode(IO_5, OUTPUT);
-  pinMode(IO_6, OUTPUT);
-  pinMode(IO_7, OUTPUT);
+
+  setDataBusOut();
 
 
   digitalWrite(ALE,OFF);
@@ -159,16 +171,8 @@ void readIDNAND(){
   digitalWrite(WE,OFF);
   digitalWrite(CE,OFF);
 
-  //todo: change this to a function
   //0x90 
-  digitalWrite(IO_0,OFF);
-  digitalWrite(IO_1,OFF);
-  digitalWrite(IO_2,OFF);
-  digitalWrite(IO_3,OFF);
-  digitalWrite(IO_4,ON);
-  digitalWrite(IO_5,OFF);
-  digitalWrite(IO_6,OFF);
-  digitalWrite(IO_7,ON);
+  putDataBus(0x90);
   // latch the command value
   digitalWrite(WE,ON);
   digitalWrite(CLE,OFF);
@@ -178,28 +182,95 @@ void readIDNAND(){
   digitalWrite(ALE,ON);
 
   //0x00 for main info
-  digitalWrite(IO_0,OFF);
-  digitalWrite(IO_1,OFF);
-  digitalWrite(IO_2,OFF);
-  digitalWrite(IO_3,OFF);
-  digitalWrite(IO_4,OFF);
-  digitalWrite(IO_5,OFF);
-  digitalWrite(IO_6,OFF);
-  digitalWrite(IO_7,OFF);
+  putDataBus(0x00);
   delayMicroseconds(500);
 
   // latch the address value
   digitalWrite(WE,ON);
   digitalWrite(ALE,OFF);
-  pinMode(IO_0, INPUT);
-  pinMode(IO_1, INPUT);
-  pinMode(IO_2, INPUT);
-  pinMode(IO_3, INPUT);
-  pinMode(IO_4, INPUT);
-  pinMode(IO_5, INPUT);
-  pinMode(IO_6, INPUT);
-  pinMode(IO_7, INPUT);
+  setDataBusIn();
 
+  // read the data bus
+  for(int i = 0; i <= 4; i++){
+    if(i == 0){
+      if(readDataBus(HEX) == 0x2c) Serial.print(" Micron");
+      else if (readDataBus(HEX)==0x98) Serial.print("Toshiba");
+      else if (readDataBus(HEX)==0xec) Serial.print("Samsung");
+      else if (readDataBus(HEX)==0x04) Serial.print("Fujitsu");
+      else if (readDataBus(HEX)==0x8f) Serial.print("National Semiconductors");
+      else if (readDataBus(HEX)==0x07) Serial.print("Renesas");
+      else if (readDataBus(HEX)==0x20) Serial.print("ST Micro");
+      else if (readDataBus(HEX)==0xad) Serial.print("Hynix");
+      else if (readDataBus(HEX)==0x01) Serial.print("AMD");
+      else if (readDataBus(HEX)==0xc2) Serial.print("Macronix");
+    }
+    else{
+      readDataBus(HEX);
+    }
+
+    Serial.println("\n\r");
+
+  }
+
+  digitalWrite(CE,ON);
+  digitalWrite(RE,ON);
+
+  Serial.println("\n\rRead ID complete\n\r");
+  Serial.println("====================================");
+}
+
+void readDATANAND(){
+  Serial.println("====================================");
+  Serial.println("\n\rReading Data\n\r");
+  //while(!digitalRead(RB)){
+  //delayMicroseconds(500);
+  //}
+
+  setDataBusOut();
+
+  digitalWrite(ALE,OFF);
+  digitalWrite(RE,ON);
+  digitalWrite(CLE,ON);
+  digitalWrite(WE,OFF);
+  digitalWrite(CE,OFF);
+  putDataBus(0x00);
+  digitalWrite(WE,ON);
+  digitalWrite(CLE,OFF);
+  digitalWrite(ALE,ON);
+  digitalWrite(WE,OFF);
+  putDataBus(0x01);
+  digitalWrite(WE,ON);
+  digitalWrite(WE,OFF);
+  putDataBus(0x01);
+  digitalWrite(WE,ON);
+  digitalWrite(WE,OFF);
+  putDataBus(0x05);
+  digitalWrite(WE,ON);
+  digitalWrite(WE,OFF);
+  putDataBus(0x03);
+  digitalWrite(WE,ON);
+  digitalWrite(WE,OFF);
+  putDataBus(0x01);
+  digitalWrite(WE,ON);
+  digitalWrite(ALE,OFF);
+  digitalWrite(CLE,ON);
+  digitalWrite(WE,OFF);
+  putDataBus(0x30);
+  digitalWrite(WE,ON);
+  digitalWrite(CLE,OFF);
+  delayMicroseconds(500);
+  
+  digitalWrite(CE,ON);
+  digitalWrite(RE,ON);
+  
+  for(int i = 0; i < 16; i++) readDataBus(HEX);
+  Serial.println("\n\rRead Data complete\n\r");
+  Serial.println("====================================");
+  
+}
+
+int readDataBus(int base){
+  // pull RE low so chip dumps contents
   digitalWrite(RE,OFF);
   int bit0 = digitalRead(IO_0);
   int bit1 = digitalRead(IO_1);
@@ -209,80 +280,48 @@ void readIDNAND(){
   int bit5 = digitalRead(IO_5);
   int bit6 = digitalRead(IO_6);
   int bit7 = digitalRead(IO_7);
-
+  // build the value
   int value = bit7 << 7 | bit6 << 6 | bit5 << 5 | bit4 << 4 | bit3 << 3 | bit2 << 2 | bit1 << 1 | bit0;
-
+  // pull RE high to enable latch of next contents
   digitalWrite(RE,ON);
-
-  Serial.println(value);
-
-  digitalWrite(RE,OFF);
-  bit0 = digitalRead(IO_0);
-  bit1 = digitalRead(IO_1);
-  bit2 = digitalRead(IO_2);
-  bit3 = digitalRead(IO_3);
-  bit4 = digitalRead(IO_4);
-  bit5 = digitalRead(IO_5);
-  bit6 = digitalRead(IO_6);
-  bit7 = digitalRead(IO_7);
-
-  value = bit7 << 7 | bit6 << 6 | bit5 << 5 | bit4 << 4 | bit3 << 3 | bit2 << 2 | bit1 << 1 | bit0;
-
-  digitalWrite(RE,ON);
-
-  Serial.println(value);
-
-  digitalWrite(RE,OFF);
-  bit0 = digitalRead(IO_0);
-  bit1 = digitalRead(IO_1);
-  bit2 = digitalRead(IO_2);
-  bit3 = digitalRead(IO_3);
-  bit4 = digitalRead(IO_4);
-  bit5 = digitalRead(IO_5);
-  bit6 = digitalRead(IO_6);
-  bit7 = digitalRead(IO_7);
-
-  value = bit7 << 7 | bit6 << 6 | bit5 << 5 | bit4 << 4 | bit3 << 3 | bit2 << 2 | bit1 << 1 | bit0;
-
-  digitalWrite(RE,ON);
-
-  Serial.println(value);
-
-  digitalWrite(RE,OFF);
-  bit0 = digitalRead(IO_0);
-  bit1 = digitalRead(IO_1);
-  bit2 = digitalRead(IO_2);
-  bit3 = digitalRead(IO_3);
-  bit4 = digitalRead(IO_4);
-  bit5 = digitalRead(IO_5);
-  bit6 = digitalRead(IO_6);
-  bit7 = digitalRead(IO_7);
-
-  value = bit7 << 7 | bit6 << 6 | bit5 << 5 | bit4 << 4 | bit3 << 3 | bit2 << 2 | bit1 << 1 | bit0;
-
-  digitalWrite(RE,ON);
-
-  Serial.println(value);
-
-  digitalWrite(RE,OFF);
-  bit0 = digitalRead(IO_0);
-  bit1 = digitalRead(IO_1);
-  bit2 = digitalRead(IO_2);
-  bit3 = digitalRead(IO_3);
-  bit4 = digitalRead(IO_4);
-  bit5 = digitalRead(IO_5);
-  bit6 = digitalRead(IO_6);
-  bit7 = digitalRead(IO_7);
-
-  value = bit7 << 7 | bit6 << 6 | bit5 << 5 | bit4 << 4 | bit3 << 3 | bit2 << 2 | bit1 << 1 | bit0;
-
-  Serial.println(value);
-
-  digitalWrite(CE,ON);
-  digitalWrite(RE,ON);
-
-  Serial.println("\n\rRead ID complete\n\r");
+  // print the value
+  Serial.print(value, base);
+  return value;
 }
+
+void setDataBusOut(){
+  pinMode(IO_0, OUTPUT);
+  pinMode(IO_1, OUTPUT);
+  pinMode(IO_2, OUTPUT);
+  pinMode(IO_3, OUTPUT);
+  pinMode(IO_4, OUTPUT);
+  pinMode(IO_5, OUTPUT);
+  pinMode(IO_6, OUTPUT);
+  pinMode(IO_7, OUTPUT);
+}
+
+void setDataBusIn(){
+  pinMode(IO_0, INPUT);
+  pinMode(IO_1, INPUT);
+  pinMode(IO_2, INPUT);
+  pinMode(IO_3, INPUT);
+  pinMode(IO_4, INPUT);
+  pinMode(IO_5, INPUT);
+  pinMode(IO_6, INPUT);
+  pinMode(IO_7, INPUT);
+}
+
+void putDataBus(int i){
+  digitalWrite(IO_0,i & BIT0);
+  digitalWrite(IO_1,i & BIT1);
+  digitalWrite(IO_2,i & BIT2);
+  digitalWrite(IO_3,i & BIT3);
+  digitalWrite(IO_4,i & BIT4);
+  digitalWrite(IO_5,i & BIT5);
+  digitalWrite(IO_6,i & BIT6);
+  digitalWrite(IO_7,i & BIT7);
+}
+
 
 
 
