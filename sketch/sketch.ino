@@ -95,6 +95,16 @@ void setDataBusOut();
 void setDataBusIn();
 // write address to databus
 void putDataBus(int i);
+// get chip ready for command
+void prepChip();
+// reset chip
+void reset();
+// latch command
+void latchCommand();
+// set address
+void setAddress();
+// latch address
+void latchAddress();
 
 
 // set this up
@@ -134,6 +144,7 @@ void setup(){
   digitalWrite(ALE,OFF);
 
   Serial.println("Pin setup complete");
+  reset();
 }
 
 // do this forever and ever and ever and ever and ever and ever and ever and ever .....
@@ -158,59 +169,49 @@ void readIDNAND(){
 
   Serial.println("====================================");
   Serial.println("\n\rReading ID\n\r");
-  //while(!digitalRead(RB)){
-  //delayMicroseconds(500);
-  //}
 
   setDataBusOut();
 
-
-  digitalWrite(ALE,OFF);
-  digitalWrite(RE,ON);
-  digitalWrite(CLE,ON);
-  digitalWrite(WE,OFF);
-  digitalWrite(CE,OFF);
+  prepChip();
 
   //0x90 
   putDataBus(0x90);
   // latch the command value
-  digitalWrite(WE,ON);
-  digitalWrite(CLE,OFF);
-
+  latchCommand();
   // setup the address value
-  digitalWrite(WE,OFF);
-  digitalWrite(ALE,ON);
-
+  setAddress();
   //0x00 for main info
   putDataBus(0x00);
-  delayMicroseconds(500);
-
   // latch the address value
-  digitalWrite(WE,ON);
-  digitalWrite(ALE,OFF);
+  latchAddress();
+  // switch data bus for intput
   setDataBusIn();
 
+  Serial.print("ID = 0x");
+  int id = 0x00;
   // read the data bus
   for(int i = 0; i <= 4; i++){
     if(i == 0){
-      if(readDataBus(HEX) == 0x2c) Serial.print(" Micron");
-      else if (readDataBus(HEX)==0x98) Serial.print("Toshiba");
-      else if (readDataBus(HEX)==0xec) Serial.print("Samsung");
-      else if (readDataBus(HEX)==0x04) Serial.print("Fujitsu");
-      else if (readDataBus(HEX)==0x8f) Serial.print("National Semiconductors");
-      else if (readDataBus(HEX)==0x07) Serial.print("Renesas");
-      else if (readDataBus(HEX)==0x20) Serial.print("ST Micro");
-      else if (readDataBus(HEX)==0xad) Serial.print("Hynix");
-      else if (readDataBus(HEX)==0x01) Serial.print("AMD");
-      else if (readDataBus(HEX)==0xc2) Serial.print("Macronix");
+      id = readDataBus(HEX);
     }
     else{
       readDataBus(HEX);
     }
-
-    Serial.println("\n\r");
-
   }
+  Serial.println("\n\r");
+  if(id == 0x2c) Serial.print("Found myself attached to Micron");
+  else if (id == 0x98) Serial.print("Found myself attached to Toshiba");
+  else if (id == 0xec) Serial.print("Found myself attached to Samsung");
+  else if (id == 0x04) Serial.print("Found myself attached to Fujitsu");
+  else if (id == 0x8f) Serial.print("Found myself attached to National Semiconductors");
+  else if (id == 0x07) Serial.print("Found myself attached to Renesas");
+  else if (id == 0x20) Serial.print("Found myself attached to ST Micro");
+  else if (id == 0xad) Serial.print("Found myself attached to Hynix");
+  else if (id == 0x01) Serial.print("Found myself attached to AMD");
+  else if (id == 0xc2) Serial.print("Found myself attached to Macronix");
+  else
+    Serial.println("could not find chip ID");
+  Serial.println("\n\rGo to http://www.linux-mtd.infradead.org/nand-data/nanddata.html for more information and find ID for info"); 
 
   digitalWrite(CE,ON);
   digitalWrite(RE,ON);
@@ -228,26 +229,23 @@ void readDATANAND(){
 
   setDataBusOut();
 
-  digitalWrite(ALE,OFF);
-  digitalWrite(RE,ON);
-  digitalWrite(CLE,ON);
-  digitalWrite(WE,OFF);
-  digitalWrite(CE,OFF);
+  prepChip();
+
   putDataBus(0x00);
-  digitalWrite(WE,ON);
-  digitalWrite(CLE,OFF);
+  latchCommand();
+
   digitalWrite(ALE,ON);
   digitalWrite(WE,OFF);
-  putDataBus(0x01);
+  putDataBus(0x00);
   digitalWrite(WE,ON);
   digitalWrite(WE,OFF);
-  putDataBus(0x01);
+  putDataBus(0x00);
   digitalWrite(WE,ON);
   digitalWrite(WE,OFF);
-  putDataBus(0x05);
+  putDataBus(0x00);
   digitalWrite(WE,ON);
   digitalWrite(WE,OFF);
-  putDataBus(0x03);
+  putDataBus(0x00);
   digitalWrite(WE,ON);
   digitalWrite(WE,OFF);
   putDataBus(0x01);
@@ -259,17 +257,70 @@ void readDATANAND(){
   digitalWrite(WE,ON);
   digitalWrite(CLE,OFF);
   delayMicroseconds(500);
-  
+
   setDataBusIn();
-  
-  for(int i = 0; i < 16; i++) readDataBus(HEX);
-  
+
+  for(int i = 0; i < 44; i++) readDataBus(HEX);
+  Serial.println("====================================");
+
+  setDataBusOut();
+
+  digitalWrite(ALE,OFF);
+  digitalWrite(RE,ON);
+  digitalWrite(CLE,ON);
+  digitalWrite(WE,OFF);
+  digitalWrite(CE,OFF);
+  putDataBus(0x31);
+  digitalWrite(WE,ON);
+  digitalWrite(CLE,OFF);
+  delayMicroseconds(500);
+
+  setDataBusIn();
+
+  for(int i = 0; i < 44; i++) readDataBus(HEX);
+
   digitalWrite(CE,ON);
   digitalWrite(RE,ON);
-  
+
   Serial.println("\n\rRead Data complete\n\r");
   Serial.println("====================================");
-  
+
+}
+
+void reset(){
+  Serial.println("Resetting");
+  digitalWrite(CLE,ON);
+  digitalWrite(WE,OFF);
+  digitalWrite(CE,OFF);
+  putDataBus(0xFF);
+  digitalWrite(WE,ON); 
+  digitalWrite(CE,ON); 
+  digitalWrite(CLE,OFF);
+  delayMicroseconds(500);
+  Serial.println("Chip Reset");
+}
+
+void latchCommand(){
+  digitalWrite(WE,ON);
+  digitalWrite(CLE,OFF);
+}
+
+void setAddress(){
+  digitalWrite(WE,OFF);
+  digitalWrite(ALE,ON);
+}
+
+void latchAddress(){
+  digitalWrite(WE,ON);
+  digitalWrite(ALE,OFF);
+}
+
+void prepChip(){
+  digitalWrite(ALE,OFF);
+  digitalWrite(RE,ON);
+  digitalWrite(CLE,ON);
+  digitalWrite(WE,OFF);
+  digitalWrite(CE,OFF);
 }
 
 int readDataBus(int base){
@@ -287,7 +338,6 @@ int readDataBus(int base){
   int value = bit7 << 7 | bit6 << 6 | bit5 << 5 | bit4 << 4 | bit3 << 3 | bit2 << 2 | bit1 << 1 | bit0;
   // pull RE high to enable latch of next contents
   digitalWrite(RE,ON);
-  // print the value
   Serial.print(value, base);
   return value;
 }
@@ -324,6 +374,7 @@ void putDataBus(int i){
   digitalWrite(IO_6,i & BIT6);
   digitalWrite(IO_7,i & BIT7);
 }
+
 
 
 
