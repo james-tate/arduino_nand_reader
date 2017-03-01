@@ -15,7 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-
+#include <stdint.h>
 
 // !!!Enable VERBOSE in File->Preferences for compiler output!!!
 
@@ -38,6 +38,7 @@
 // based on http://circuits.datasheetdir.com/400/MT29F2G08AABWP-pinout.jpg
 #if defined(__AVR_ATmega2560__)
 #warning "Compiling for MEGA2560"
+#define LED      13 // cause every project must have atleast 1 LED
 #define RB        7  
 #define RE        8  
 #define CE        9  
@@ -53,17 +54,6 @@
 #define IO_5     42
 #define IO_6     43
 #define IO_7     44
-#if defined(__x16__)
-#warning "Configure for x16"
-#define IO_8     26
-#define IO_9     27
-#define IO_10    28
-#define IO_11    33
-#define IO_12    40
-#define IO_13    45
-#define IO_14    46
-#define IO_15    47
-#endif
 #else
 #error "board not supported"
 #endif
@@ -77,7 +67,6 @@
 #define BIT6     64
 #define BIT7    128
 
-// todo: think of way to clarify inverted signals
 enum{
   OFF = 0,
   ON = 1,
@@ -99,12 +88,18 @@ void putDataBus(int i);
 void prepChip();
 // reset chip
 void reset();
+// set command
+void setCommand();
 // latch command
 void latchCommand();
 // set address
 void setAddress();
 // latch address
 void latchAddress();
+// release chip
+void closeChip();
+// toggle write enable
+void toggleWE();
 
 
 // set this up
@@ -113,7 +108,7 @@ void setup(){
   Serial.begin(115200);
 
   Serial.println("Welcome");
-
+  pinMode(LED, OUTPUT);
   pinMode(ALE, OUTPUT);   // Adress latch enable
   pinMode(CE, OUTPUT);    // Chip enable
   pinMode(CLE,OUTPUT);    // Command latch enable
@@ -142,6 +137,7 @@ void setup(){
   digitalWrite(RE,ON); // inverted
   digitalWrite(CLE,OFF);
   digitalWrite(ALE,OFF);
+  //digitalWrite(LED,ON);
 
   Serial.println("Pin setup complete");
   reset();
@@ -160,7 +156,7 @@ void loop(){
   if(choice == '1'){
     readIDNAND();
   }
-  if(choice == '2'){
+  else if(choice == '2'){
     readDATANAND();
   }
 }
@@ -213,75 +209,65 @@ void readIDNAND(){
     Serial.println("could not find chip ID");
   Serial.println("\n\rGo to http://www.linux-mtd.infradead.org/nand-data/nanddata.html for more information and find ID for info"); 
 
-  digitalWrite(CE,ON);
-  digitalWrite(RE,ON);
+  closeChip();
 
   Serial.println("\n\rRead ID complete\n\r");
   Serial.println("====================================");
 }
 
 void readDATANAND(){
-  Serial.println("====================================");
-  Serial.println("\n\rReading Data\n\r");
-  //while(!digitalRead(RB)){
-  //delayMicroseconds(500);
-  //}
 
-  setDataBusOut();
+  bool ledState = ON;
+  // Change this section to fit your chip characteristics
+  // ----------------------------------------------------
+  // current settings are for MT29f8G08ABABA page 16
+  int pagesize = 4320;
+  
+  uint8_t low_block = 0x00;   // DQ7:0 Cycle 4
+  uint8_t high_block= 0x00;   // DQ1 and DQ 0 Cycle 5
+  bool plane = 0;             // DQ7 Cycle 3
+  uint8_t page = 0x00;        // DQ0:6 Cycle 3
+  
+  while(high_block < 0x3){
+    setDataBusOut();
+    prepChip();
+    putDataBus(0x00);
+    latchCommand();
 
-  prepChip();
+    // Address
+    setAddress();
+    putDataBus(0x00); // always 0 column
+    toggleWE();
+    putDataBus(0x00); // always 0 column
+    toggleWE();
+    putDataBus(page); // page
+    toggleWE();
+    putDataBus(low_block); // block 
+    toggleWE();
+    putDataBus(high_block); // block
+    latchAddress();
+    // ------------
 
-  putDataBus(0x00);
-  latchCommand();
+    page++;
+    if(page == 0x80){
+      page = 0;
+      // need to change this
+      plane = !plane;
+      low_block++; 
+      if(low_block == 0xFF) high_block++;
+      ledState = !ledState;
+      digitalWrite(LED,ledState);
+    }
+    setCommand();
+    putDataBus(0x30);
+    latchCommand();
+    setDataBusIn();
 
-  digitalWrite(ALE,ON);
-  digitalWrite(WE,OFF);
-  putDataBus(0x00);
-  digitalWrite(WE,ON);
-  digitalWrite(WE,OFF);
-  putDataBus(0x00);
-  digitalWrite(WE,ON);
-  digitalWrite(WE,OFF);
-  putDataBus(0x00);
-  digitalWrite(WE,ON);
-  digitalWrite(WE,OFF);
-  putDataBus(0x00);
-  digitalWrite(WE,ON);
-  digitalWrite(WE,OFF);
-  putDataBus(0x01);
-  digitalWrite(WE,ON);
-  digitalWrite(ALE,OFF);
-  digitalWrite(CLE,ON);
-  digitalWrite(WE,OFF);
-  putDataBus(0x30);
-  digitalWrite(WE,ON);
-  digitalWrite(CLE,OFF);
-  delayMicroseconds(500);
-
-  setDataBusIn();
-
-  for(int i = 0; i < 44; i++) readDataBus(HEX);
-  Serial.println("====================================");
-
-  setDataBusOut();
-
-  digitalWrite(ALE,OFF);
-  digitalWrite(RE,ON);
-  digitalWrite(CLE,ON);
-  digitalWrite(WE,OFF);
-  digitalWrite(CE,OFF);
-  putDataBus(0x31);
-  digitalWrite(WE,ON);
-  digitalWrite(CLE,OFF);
-  delayMicroseconds(500);
-
-  setDataBusIn();
-
-  for(int i = 0; i < 44; i++) readDataBus(HEX);
-
-  digitalWrite(CE,ON);
-  digitalWrite(RE,ON);
-
+    for(int i = 0; i < pagesize; i++) readDataBus(1);
+  }
+  // ----------------------------------------------------
+  
+  closeChip();
   Serial.println("\n\rRead Data complete\n\r");
   Serial.println("====================================");
 
@@ -298,6 +284,11 @@ void reset(){
   digitalWrite(CLE,OFF);
   delayMicroseconds(500);
   Serial.println("Chip Reset");
+}
+
+void setCommand(){
+  digitalWrite(CLE,ON);
+  digitalWrite(WE,OFF);
 }
 
 void latchCommand(){
@@ -323,6 +314,16 @@ void prepChip(){
   digitalWrite(CE,OFF);
 }
 
+void closeChip(){
+  digitalWrite(CE,ON);
+  digitalWrite(RE,ON);
+}
+
+void toggleWE(){
+  digitalWrite(WE,ON);
+  digitalWrite(WE,OFF);
+}
+
 int readDataBus(int base){
   // pull RE low so chip dumps contents
   digitalWrite(RE,OFF);
@@ -338,7 +339,10 @@ int readDataBus(int base){
   int value = bit7 << 7 | bit6 << 6 | bit5 << 5 | bit4 << 4 | bit3 << 3 | bit2 << 2 | bit1 << 1 | bit0;
   // pull RE high to enable latch of next contents
   digitalWrite(RE,ON);
-  Serial.print(value, base);
+  if(base == 1)
+    Serial.write(value);
+  else
+    Serial.print(value, base);
   return value;
 }
 
@@ -374,6 +378,8 @@ void putDataBus(int i){
   digitalWrite(IO_6,i & BIT6);
   digitalWrite(IO_7,i & BIT7);
 }
+
+
 
 
 
