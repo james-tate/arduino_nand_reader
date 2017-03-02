@@ -1,3 +1,3 @@
 # arduino_NAND_reader
 An arduino project that will read NAND chips
-https://www.hwreblog.com
+http://hwreblog.com/projects/arduino_nand_reader.html
